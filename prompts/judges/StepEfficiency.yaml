@@ -1,0 +1,17 @@
+id: StepEfficiency
+name: StepEfficiency
+target_agent: graph
+target_node: graph
+kind: deterministic
+threshold: 0.7
+evaluation_params:
+  - ACTUAL_OUTPUT
+  - EXPECTED_OUTPUT
+criteria: |
+  实际路径是否与期望路径一致，有无多余节点或漏掉关键节点。
+evaluation_steps:
+  - 路径完全一致给 1.0。
+  - 期望路径是实际路径的子序列时可给高分。
+  - 缺失关键节点或明显绕路扣分。
+notes: |
+  轨迹级指标。单 Agent 评测请忽略本文件。

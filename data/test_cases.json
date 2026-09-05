@@ -1,0 +1,122 @@
+[
+  {
+    "id": "tc_greeting",
+    "query": "你好，在吗？",
+    "expected_intent": "greeting",
+    "expected_route": "direct_reply",
+    "expected_path": ["intent_preprocess", "supervisor", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": [],
+    "expected_reply_points": ["问候", "可以帮忙"],
+    "expected_output": "礼貌问候并询问用户需要什么帮助。",
+    "task": "友好地问候用户并表示可以提供客服帮助。"
+  },
+  {
+    "id": "tc_product_battery",
+    "query": "星云降噪耳机 Pro 开降噪能用多久？包装里有没有音频线？",
+    "expected_intent": "product_inquiry",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": ["kb_wh100_specs"],
+    "expected_reply_points": ["28小时", "3.5mm", "音频线"],
+    "expected_output": "开降噪续航约28小时；包装含3.5mm音频线、充电线和收纳盒。",
+    "task": "根据知识库准确回答耳机续航和配件问题。"
+  },
+  {
+    "id": "tc_order_status",
+    "query": "帮我查一下订单 A20240901 发到哪了？",
+    "expected_intent": "order_status",
+    "expected_route": "tool_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "reply_generate", "tools", "reply_generate"],
+    "expected_tools": ["lookup_order", "get_shipping_status"],
+    "relevant_doc_ids": [],
+    "expected_reply_points": ["已发货", "顺丰", "SF"],
+    "expected_output": "告知订单已发货、物流公司和预计送达时间，不要编造单号。",
+    "task": "调用订单和物流工具，向用户同步真实履约状态。"
+  },
+  {
+    "id": "tc_refund_policy",
+    "query": "签收几天内可以无理由退货？退款大概多久到账？",
+    "expected_intent": "refund",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": ["kb_return_7day", "kb_refund_timeline"],
+    "expected_reply_points": ["7天", "1-3个工作日", "原路返回"],
+    "expected_output": "签收7天内可无理由退货；质检通过后1-3个工作日原路退款。",
+    "task": "检索退货退款政策并完整回答时限与到账时间。"
+  },
+  {
+    "id": "tc_refund_with_order",
+    "query": "我订单 A20240888 想退货，还能退吗？能退多少钱？",
+    "expected_intent": "refund",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate", "tools", "reply_generate"],
+    "expected_tools": ["lookup_order", "calculate_refund"],
+    "relevant_doc_ids": ["kb_return_7day"],
+    "expected_reply_points": ["7天", "已签收", "899"],
+    "expected_output": "结合7天政策和订单签收时间判断可退，并给出可退金额。",
+    "task": "先检索退货政策，再调用订单/退款工具给出是否可退和金额。"
+  },
+  {
+    "id": "tc_shipping_eta",
+    "query": "现货下单的话发货要多久？我在成都大概几天能收到？",
+    "expected_intent": "shipping",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": ["kb_shipping_time"],
+    "expected_reply_points": ["24小时", "3-5天"],
+    "expected_output": "现货付款后24小时内发货，成都等非江浙沪地区一般3-5天送达。",
+    "task": "检索配送时效知识，回答发货时间和成都预计送达天数。"
+  },
+  {
+    "id": "tc_account_password",
+    "query": "我换手机号了，登录密码忘了，怎么找回？",
+    "expected_intent": "account",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": ["kb_account_password"],
+    "expected_reply_points": ["忘记密码", "人工核验", "订单号"],
+    "expected_output": "说明验证码重置流程，并告知手机号停用时需提供订单号做人工核验。",
+    "task": "根据账号帮助文档指导用户找回密码。"
+  },
+  {
+    "id": "tc_complaint",
+    "query": "物流把盒子都撞坏了，耳机外观有划痕，我要投诉！订单是 A20240901。",
+    "expected_intent": "complaint",
+    "expected_route": "tool_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "reply_generate", "tools", "reply_generate"],
+    "expected_tools": ["lookup_order", "create_ticket"],
+    "relevant_doc_ids": [],
+    "expected_reply_points": ["抱歉", "工单", "质量"],
+    "expected_output": "道歉、确认订单、创建投诉工单，并告知质量问题可走退换货。",
+    "task": "安抚用户、查询订单并创建投诉工单。"
+  },
+  {
+    "id": "tc_out_of_scope",
+    "query": "明天北京会下雨吗？顺便帮我写一首诗。",
+    "expected_intent": "out_of_scope",
+    "expected_route": "direct_reply",
+    "expected_path": ["intent_preprocess", "supervisor", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": [],
+    "expected_reply_points": ["无法", "购物", "售后"],
+    "expected_output": "礼貌说明只能处理购物与售后问题，并引导用户提出相关需求。",
+    "task": "识别超范围请求，拒绝天气/写诗并引导回客服场景。"
+  },
+  {
+    "id": "tc_watch_compat",
+    "query": "星云手表 S2 能单独打电话吗？安卓手机能用吗？",
+    "expected_intent": "product_inquiry",
+    "expected_route": "rag_agent",
+    "expected_path": ["intent_preprocess", "supervisor", "rag_retrieve", "reply_generate"],
+    "expected_tools": [],
+    "relevant_doc_ids": ["kb_watch_s2"],
+    "expected_reply_points": ["不支持独立通话", "Android 10"],
+    "expected_output": "不支持独立通话；兼容 Android 10+ 与 iOS 15+。",
+    "task": "检索手表规格，准确回答通话能力和系统兼容性。"
+  }
+]

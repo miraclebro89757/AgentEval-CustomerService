@@ -1,0 +1,17 @@
+id: ReplyRelevancy
+name: ReplyRelevancy
+target_agent: reply_generate
+target_node: reply_generate
+kind: geval
+threshold: 0.6
+evaluation_params:
+  - INPUT
+  - ACTUAL_OUTPUT
+criteria: |
+  最终客服回复是否直接回应用户问题，而不是答非所问或空话。
+evaluation_steps:
+  - 列出用户问题中的信息需求。
+  - 检查 actual output 是否回应这些需求。
+  - 无关、拒绝不当、或明显跑题则低分。
+notes: |
+  单 Agent 评测：可把检索结果和工具结果作为上游假输入喂给回复节点后再打本指标。

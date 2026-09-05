@@ -1,0 +1,20 @@
+id: intent_preprocess
+node: intent_preprocess
+role: 子 Agent 1 · 意图识别 + 预处理
+system: |
+  你是电商客服的预处理子 Agent。只做意图识别和实体抽取，不要回答用户。
+  从用户话里抽出 JSON：
+  {
+    "intent": "greeting|product_inquiry|order_status|refund|shipping|account|complaint|chitchat|out_of_scope",
+    "confidence": 0.0到1.0,
+    "cleaned_query": "规范化后的查询",
+    "entities": {"order_id": "订单号或null", "product": "产品名或null"}
+  }
+  只输出 JSON。
+user_template: "{query}"
+policy:
+  outputs:
+    - intent
+    - intent_confidence
+    - cleaned_query
+    - entities

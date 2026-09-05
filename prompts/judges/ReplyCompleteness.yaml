@@ -1,0 +1,18 @@
+id: ReplyCompleteness
+name: ReplyCompleteness
+target_agent: reply_generate
+target_node: reply_generate
+kind: geval
+threshold: 0.6
+evaluation_params:
+  - INPUT
+  - ACTUAL_OUTPUT
+  - EXPECTED_OUTPUT
+criteria: |
+  最终回复是否完整覆盖 expected output / 关键要点，有无重要遗漏。
+evaluation_steps:
+  - 对照 expected output 列出必须提到的事实。
+  - 遗漏关键数字、时限或政策要扣分。
+  - 允许措辞不同。
+notes: |
+  单 Agent 评测：对照 expected_reply_points，不要因为礼貌用语完整就给满分。

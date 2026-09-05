@@ -1,0 +1,109 @@
+"""
+pytest 入口：无 API Key 也可跑通图与节点级确定性指标。
+
+    python -m pytest evaluator/test_eval.py -q
+"""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from evaluator.metrics import score_intent, score_path_efficiency, score_routing, score_tools
+from evaluator.runner import evaluate_dataset, load_test_cases
+from graph.graph import invoke_agent
+from graph.nodes import classify_intent_heuristic
+
+os.environ.setdefault("AGENT_LLM", "heuristic")
+os.environ.setdefault("JUDGE_LLM", "heuristic")
+os.environ.setdefault("CONFIDENT_TRACING_ENABLED", "NO")
+
+
+@pytest.fixture(scope="module")
+def cases():
+    return load_test_cases()
+
+
+def test_heuristic_intent_matches_gold(cases):
+    misses = []
+    for case in cases:
+        pred, _ = classify_intent_heuristic(case["query"])
+        if pred != case["expected_intent"]:
+            misses.append((case["id"], pred, case["expected_intent"]))
+    assert not misses, f"启发式意图偏离: {misses}"
+
+
+def test_graph_produces_reply_and_trace(cases):
+    sample = next(c for c in cases if c["id"] == "tc_order_status")
+    result = invoke_agent(sample["query"], use_deepeval_callback=False)
+    assert result.get("final_reply")
+    assert "intent_preprocess" in result.get("path", [])
+    assert "supervisor" in result.get("path", [])
+    assert result.get("route") == "tool_agent"
+    names = [t["name"] for t in result.get("tools_called") or []]
+    assert "lookup_order" in names
+    assert "get_shipping_status" in names
+
+
+def test_rag_case_hits_product_doc(cases):
+    sample = next(c for c in cases if c["id"] == "tc_product_battery")
+    result = invoke_agent(sample["query"], use_deepeval_callback=False)
+    assert result.get("route") == "rag_agent"
+    assert "kb_wh100_specs" in (result.get("retrieved_doc_ids") or [])
+    reply = result.get("final_reply") or ""
+    assert "28" in reply or "音频" in reply
+
+
+def test_component_metrics_have_reasons():
+    intent = score_intent("refund", "refund", "我想退货", None)
+    assert intent.success and intent.reason
+    routing = score_routing("rag_agent", "rag_agent", "refund", "我想退货", None)
+    assert routing.success
+    tools = score_tools("查订单", [{"name": "lookup_order", "args": {}}], ["lookup_order"], "ok")
+    assert tools.success
+    path = score_path_efficiency(
+        ["intent_preprocess", "supervisor", "reply_generate"],
+        ["intent_preprocess", "supervisor", "reply_generate"],
+    )
+    assert path.score == 1.0
+
+
+def test_prompt_catalog_is_complete():
+    from prompts import judge_ids_for_agent, list_agent_ids, list_judge_ids, load_agent, load_judge
+
+    agents = list_agent_ids()
+    assert agents == ["intent_preprocess", "rag_retrieve", "reply_generate", "supervisor"]
+    for agent_id in agents:
+        prompt = load_agent(agent_id)
+        assert prompt.system
+        assert prompt.node
+    judges = list_judge_ids()
+    assert "IntentAccuracy" in judges
+    assert len(judges) >= 8
+    for metric_id in ("IntentAccuracy", "RoutingCorrectness", "RAGQuality", "ReplyRelevancy"):
+        spec = load_judge(metric_id)
+        assert spec.criteria
+        assert spec.evaluation_steps
+        assert spec.threshold > 0
+    assert "IntentAccuracy" in judge_ids_for_agent("intent_preprocess")
+    assert "RoutingCorrectness" in judge_ids_for_agent("supervisor")
+    assert "RAGQuality" in judge_ids_for_agent("rag_retrieve")
+    assert "TaskCompletion" in judge_ids_for_agent("graph")
+
+
+def test_single_agent_eval_filters_metrics():
+    payload = evaluate_dataset(case_ids=["tc_greeting"], write=False, agent="supervisor")
+    names = {s["name"] for s in payload["cases"][0]["component"]}
+    assert names == {"RoutingCorrectness"}
+    assert payload["cases"][0]["trajectory"] == []
+    assert payload["eval_scope"] == "single-agent:supervisor"
+
+
+def test_evaluate_dataset_smoke():
+    payload = evaluate_dataset(case_ids=["tc_greeting", "tc_product_battery"], write=False)
+    assert payload["summary"]["total_cases"] == 2
+    for case in payload["cases"]:
+        assert case["component"]
+        assert case["trajectory"]
+        assert all("reason" in s and "score" in s for s in case["component"])

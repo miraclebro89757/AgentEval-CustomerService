@@ -1,0 +1,17 @@
+id: ToolCorrectness
+name: ToolCorrectness
+target_agent: reply_generate
+target_node: tools
+kind: deterministic
+threshold: 0.7
+evaluation_params:
+  - INPUT
+  - ACTUAL_OUTPUT
+criteria: |
+  回复子 Agent 是否调用了标注期望的工具，且没有明显多余调用。
+evaluation_steps:
+  - 对比 tools_called 与 expected_tools 的工具名。
+  - 缺必要工具扣分；多调无关工具轻度扣分。
+  - 无需工具且未调用则满分。
+notes: |
+  默认走 DeepEval ToolCorrectnessMetric（确定性）。单 Agent 评测只看 tools_called。

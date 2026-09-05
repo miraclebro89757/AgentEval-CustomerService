@@ -1,0 +1,16 @@
+id: ReplyPoliteness
+name: ReplyPoliteness
+target_agent: reply_generate
+target_node: reply_generate
+kind: geval
+threshold: 0.6
+evaluation_params:
+  - ACTUAL_OUTPUT
+criteria: |
+  回复是否礼貌、有共情、不推诿，并给出可执行下一步。
+evaluation_steps:
+  - 检查称呼与礼貌用语。
+  - 投诉场景是否道歉。
+  - 是否生硬、指责用户或敷衍。
+notes: |
+  单 Agent 评测：只看回复文本语气，不看检索是否命中。

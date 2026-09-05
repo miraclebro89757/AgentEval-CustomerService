@@ -1,0 +1,23 @@
+id: TaskCompletion
+name: TaskCompletion
+target_agent: graph
+target_node: graph
+kind: geval
+threshold: 0.6
+evaluation_params:
+  - INPUT
+  - ACTUAL_OUTPUT
+  - EXPECTED_OUTPUT
+criteria: |
+  根据整条 Agent 轨迹判断任务是否完成：意图、路由、工具、最终回复是否一起把用户任务做完。
+evaluation_steps:
+  - 明确用户任务。
+  - 看路径是否合理，有无缺关键节点或多余绕路。
+  - 看最终回复是否真正完成任务。
+  - 完成任务给高分；部分完成给中分；跑题或失败给低分。
+scoring:
+  intent_weight: 0.25
+  route_weight: 0.25
+  coverage_weight: 0.5
+notes: |
+  轨迹级指标，不要用于单 Agent 评测。单节点请改用对应 judge prompt。

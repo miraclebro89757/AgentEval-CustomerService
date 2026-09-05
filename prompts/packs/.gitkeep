@@ -1,0 +1,2 @@
+# 在此目录放实验包：packs/<name>/{agents,judges}/*.yaml
+# 设置 PROMPT_PACK=<name> 后，同名文件会覆盖默认 prompts。

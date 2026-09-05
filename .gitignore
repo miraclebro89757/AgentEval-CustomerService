@@ -1,0 +1,15 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.deepeval/
+.mypy_cache/
+.ruff_cache/
+results/*.md
+!results/example_report.md
+*.egg-info/
+dist/
+build/
+.DS_Store

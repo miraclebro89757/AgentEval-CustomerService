@@ -1,0 +1,22 @@
+id: RAGQuality
+name: RAGQuality
+target_agent: rag_retrieve
+target_node: rag_retrieve
+kind: geval
+threshold: 0.6
+evaluation_params:
+  - INPUT
+  - ACTUAL_OUTPUT
+  - EXPECTED_OUTPUT
+  - RETRIEVAL_CONTEXT
+criteria: |
+  检索到的知识是否与用户问题相关，是否覆盖 expected output 中的文档 id，是否夹带明显无关文档。
+evaluation_steps:
+  - 看用户问题需要哪些知识。
+  - 检查 retrieval context 是否能回答该问题。
+  - 无关文档越多分越低；缺关键文档同样扣分。
+scoring:
+  recall_weight: 0.7
+  precision_weight: 0.3
+notes: |
+  单 Agent 评测：只看 retrieved_doc_ids 与 relevant_doc_ids。确定性回退使用 scoring 权重。
