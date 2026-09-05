@@ -67,6 +67,8 @@ def main() -> None:
         print("route :", state.get("route"), "|", state.get("route_reason"))
         if state.get("policy_blocked"):
             print("safety:", state.get("policy_hit"))
+        if state.get("duty_hit"):
+            print("duty  :", state.get("duty_hit"))
         print("docs  :", state.get("retrieved_doc_ids"))
         print("tools :", [t.get("name") for t in state.get("tools_called") or []])
         print("reply :", state.get("final_reply"))

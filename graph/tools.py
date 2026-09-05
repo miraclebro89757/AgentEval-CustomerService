@@ -158,7 +158,110 @@ def create_ticket(category: str, summary: str, order_id: str = "") -> str:
     )
 
 
-CUSTOMER_TOOLS = [lookup_order, get_shipping_status, calculate_refund, create_ticket]
+# 模拟库存 / 会员 / 质保。真实系统会打到 WMS、CRM、质保中台。
+STOCK: dict[str, dict[str, Any]] = {
+    "WH-100": {
+        "sku": "WH-100",
+        "product": "星云降噪耳机 Pro",
+        "in_stock": True,
+        "warehouse": "成都仓",
+        "qty": 128,
+        "preorder_days": 0,
+    },
+    "WATCH-S2": {
+        "sku": "WATCH-S2",
+        "product": "星云手表 S2",
+        "in_stock": True,
+        "warehouse": "华东仓",
+        "qty": 46,
+        "preorder_days": 0,
+    },
+    "CASE-WH": {
+        "sku": "CASE-WH",
+        "product": "耳机保护套",
+        "in_stock": False,
+        "warehouse": "华东仓",
+        "qty": 0,
+        "preorder_days": 7,
+    },
+}
+
+MEMBER_POINTS: dict[str, dict[str, Any]] = {
+    "A20240901": {"order_id": "A20240901", "points": 1280, "level": "银卡", "expiring": 200, "expire_at": "2026-12-31"},
+    "A20240888": {"order_id": "A20240888", "points": 560, "level": "普通", "expiring": 60, "expire_at": "2026-10-31"},
+    "A20240700": {"order_id": "A20240700", "points": 2100, "level": "金卡", "expiring": 0, "expire_at": None},
+    "A20241002": {"order_id": "A20241002", "points": 80, "level": "普通", "expiring": 80, "expire_at": "2026-09-30"},
+}
+
+WARRANTIES: dict[str, dict[str, Any]] = {
+    "A20240901": {"order_id": "A20240901", "sku": "WH-100", "status": "在保", "warranty_until": "2028-09-03", "months": 24},
+    "A20240888": {"order_id": "A20240888", "sku": "WH-100", "status": "在保", "warranty_until": "2028-08-28", "months": 24},
+    "A20240700": {"order_id": "A20240700", "sku": "WATCH-S2", "status": "在保", "warranty_until": "2028-07-01", "months": 24},
+    "A20241002": {"order_id": "A20241002", "sku": "WH-100", "status": "待激活", "warranty_until": None, "months": 24},
+}
+
+
+def _resolve_sku(sku: str = "", product: str = "") -> str | None:
+    key = (sku or "").strip().upper()
+    if key in STOCK:
+        return key
+    name = (product or "").strip()
+    for item_sku, item in STOCK.items():
+        title = str(item.get("product") or "")
+        if name and (name in title or title in name):
+            return item_sku
+    if "耳机" in name:
+        return "WH-100"
+    if "手表" in name or "s2" in name.lower():
+        return "WATCH-S2"
+    return None
+
+
+@tool
+def check_stock(sku: str = "", product: str = "") -> str:
+    """查询商品现货库存、仓位和缺货预售天数。sku 如 WH-100，或传商品名。"""
+    resolved = _resolve_sku(sku, product)
+    if not resolved:
+        return _dump({"ok": False, "error": "未识别商品，请提供型号（WH-100 / WATCH-S2）或商品名"})
+    item = STOCK[resolved]
+    return _dump({"ok": True, **item})
+
+
+@tool
+def lookup_member_points(order_id: str = "", phone_last4: str = "") -> str:
+    """查询会员积分、等级和即将过期积分。可凭订单号；手机尾号目前仅作备注。"""
+    oid = (order_id or "").strip().upper()
+    member = MEMBER_POINTS.get(oid)
+    if not member:
+        return _dump(
+            {
+                "ok": False,
+                "error": "未找到会员积分，请提供订单号",
+                "phone_last4": phone_last4 or None,
+            }
+        )
+    return _dump({"ok": True, "phone_last4": phone_last4 or None, **member})
+
+
+@tool
+def check_warranty(order_id: str) -> str:
+    """查询订单商品是否在保、质保截止日期。"""
+    oid = (order_id or "").strip().upper()
+    item = WARRANTIES.get(oid)
+    if not item:
+        return _dump({"ok": False, "error": f"未找到订单 {order_id} 的质保记录"})
+    return _dump({"ok": True, **item})
+
+
+CUSTOMER_TOOLS = [
+    lookup_order,
+    get_shipping_status,
+    calculate_refund,
+    create_ticket,
+    check_stock,
+    lookup_member_points,
+    check_warranty,
+]
 TOOL_BY_NAME = {t.name: t for t in CUSTOMER_TOOLS}
 
 

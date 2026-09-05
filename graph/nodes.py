@@ -13,6 +13,7 @@ from langgraph.prebuilt import ToolNode
 
 from graph.llm import extract_json_object, get_chat_model
 from graph.retriever import retrieve
+from graph.rules import declare_duty_boundary, duty_rules_block, scan_duty_boundary
 from graph.safety import boundary_reply, scan_policy_violation
 from graph.state import BLOCKED_ROUTE, INTENT_TO_ROUTE, VALID_INTENTS, VALID_ROUTES, AgentState
 from graph.tools import CUSTOMER_TOOLS, invoke_tool
@@ -39,6 +40,12 @@ INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "降噪",
         "wh-100",
         "s2",
+        "有货",
+        "库存",
+        "缺货",
+        "保修",
+        "质保",
+        "在保",
     ),
     "out_of_scope": ("下雨", "天气", "写一首", "写诗", "股票", "彩票"),
 }
@@ -71,6 +78,8 @@ def _extract_order_id(text: str) -> str | None:
 def classify_intent_heuristic(query: str) -> tuple[str, float]:
     if scan_policy_violation(query):
         return "policy_violation", 1.0
+    if scan_duty_boundary(query):
+        return "out_of_scope", 0.95
     q = (query or "").strip().lower()
     scores: dict[str, int] = {}
     for intent, kws in INTENT_KEYWORDS.items():
@@ -80,6 +89,15 @@ def classify_intent_heuristic(query: str) -> tuple[str, float]:
         scores["order_status"] = 0
     if scores.get("complaint"):
         scores["refund"] = max(0, scores.get("refund", 0) - 1)
+    if any(k in q for k in ("积分", "会员等级", "多少分")):
+        scores["account"] = scores.get("account", 0) + 2
+        scores["order_status"] = 0
+    if any(k in q for k in ("保修", "质保", "在保", "保修期")):
+        scores["product_inquiry"] = scores.get("product_inquiry", 0) + 2
+        scores["order_status"] = 0
+    if any(k in q for k in ("有货", "还有货", "库存", "缺货")):
+        scores["product_inquiry"] = scores.get("product_inquiry", 0) + 2
+        scores["shipping"] = 0
     best = max(scores, key=lambda k: scores[k])
     best_score = scores[best]
     if best_score <= 0:
@@ -93,17 +111,28 @@ def classify_intent_heuristic(query: str) -> tuple[str, float]:
 def _heuristic_preprocess(query: str) -> dict[str, Any]:
     intent, confidence = classify_intent_heuristic(query)
     order_id = _extract_order_id(query)
+    sku = None
+    if re.search(r"WH-100", query, re.I):
+        sku = "WH-100"
+    elif re.search(r"WATCH-S2|\bS2\b", query, re.I):
+        sku = "WATCH-S2"
     product = None
-    if "耳机" in query or "WH-100" in query.upper() or "降噪" in query:
+    if "耳机" in query or sku == "WH-100" or "降噪" in query:
         product = "星云降噪耳机 Pro"
-    elif "手表" in query or "S2" in query.upper():
+        sku = sku or "WH-100"
+    elif "手表" in query or sku == "WATCH-S2":
         product = "星云手表 S2"
+        sku = sku or "WATCH-S2"
+    phone_last4 = None
+    tail = re.search(r"尾号\s*(\d{4})", query)
+    if tail:
+        phone_last4 = tail.group(1)
     cleaned = re.sub(r"\s+", " ", query).strip()
     return {
         "intent": intent,
         "intent_confidence": confidence,
         "cleaned_query": cleaned,
-        "entities": {"order_id": order_id, "product": product},
+        "entities": {"order_id": order_id, "product": product, "sku": sku, "phone_last4": phone_last4},
     }
 
 
@@ -148,13 +177,18 @@ def intent_preprocess(state: AgentState) -> dict:
         )
         return {"user_query": query, **result, **traced}
     result = _heuristic_preprocess(query)
+    duty = scan_duty_boundary(query)
+    if duty:
+        result["intent"] = "out_of_scope"
+        result["intent_confidence"] = max(float(result.get("intent_confidence") or 0), 0.95)
+        result["duty_hit"] = duty
     model = get_chat_model()
     if model is not None:
         try:
             prompt = load_agent("intent_preprocess")
             msg = model.invoke(
                 [
-                    SystemMessage(content=prompt.render_system()),
+                    SystemMessage(content=prompt.render_system(duty_rules=duty_rules_block())),
                     HumanMessage(content=prompt.render_user(query=query)),
                 ]
             )
@@ -170,6 +204,11 @@ def intent_preprocess(state: AgentState) -> dict:
                 result["entities"] = entities
         except Exception:
             pass
+    duty = scan_duty_boundary(query)
+    if duty:
+        result["intent"] = "out_of_scope"
+        result["intent_confidence"] = 0.95
+        result["duty_hit"] = duty
     traced = _trace(
         state,
         "intent_preprocess",
@@ -180,7 +219,26 @@ def intent_preprocess(state: AgentState) -> dict:
     return {"user_query": query, **result, **traced}
 
 
-def _route_for_intent(intent: str) -> str:
+TOOL_QUERY_HINTS = (
+    "有货",
+    "还有货",
+    "库存",
+    "缺货",
+    "积分",
+    "会员等级",
+    "多少分",
+    "保修",
+    "质保",
+    "在保",
+    "保修期",
+)
+
+
+def _route_for_intent(intent: str, query: str = "") -> str:
+    if intent == "out_of_scope":
+        return "direct_reply"
+    if any(hint in (query or "") for hint in TOOL_QUERY_HINTS):
+        return "tool_agent"
     return INTENT_TO_ROUTE.get(intent, "direct_reply")
 
 
@@ -210,7 +268,7 @@ def supervisor(state: AgentState) -> dict:
         return {**outputs, **traced}
     intent = state.get("intent") or "chitchat"
     query = state.get("user_query") or ""
-    route = _route_for_intent(intent)
+    route = _route_for_intent(intent, query)
     reason = f"根据意图 {intent} 按路由表分发给 {route}"
     supervisor_intent = intent
 
@@ -220,7 +278,7 @@ def supervisor(state: AgentState) -> dict:
             prompt = load_agent("supervisor")
             msg = model.invoke(
                 [
-                    SystemMessage(content=prompt.render_system()),
+                    SystemMessage(content=prompt.render_system(duty_rules=duty_rules_block())),
                     HumanMessage(
                         content=prompt.render_user(
                             query=query,
@@ -234,11 +292,17 @@ def supervisor(state: AgentState) -> dict:
             if parsed:
                 if parsed.get("intent") in VALID_INTENTS:
                     supervisor_intent = parsed["intent"]
-                    route = _route_for_intent(supervisor_intent)
+                    route = _route_for_intent(supervisor_intent, query)
                 if parsed.get("route") in VALID_ROUTES:
                     route = parsed["route"]
                 if parsed.get("reason"):
                     reason = str(parsed["reason"])
+                if any(hint in query for hint in TOOL_QUERY_HINTS) and supervisor_intent != "out_of_scope":
+                    route = "tool_agent"
+                    reason = "库存/积分/质保需要实时工具，保持 tool_agent"
+                if state.get("duty_hit") or intent == "out_of_scope" or supervisor_intent == "out_of_scope":
+                    route = "direct_reply"
+                    reason = "超出职责边界，只声明边界、不调用工具"
         except Exception:
             pass
 
@@ -247,6 +311,9 @@ def supervisor(state: AgentState) -> dict:
         "route": route,
         "route_reason": reason,
     }
+    if state.get("duty_hit") or intent == "out_of_scope" or supervisor_intent == "out_of_scope":
+        outputs["route"] = "direct_reply"
+        outputs["route_reason"] = "超出职责边界，只声明边界、不调用工具"
     traced = _trace(
         state,
         "supervisor",
@@ -307,7 +374,12 @@ def _tool_messages_text(state: AgentState) -> str:
 
 
 def _plan_heuristic_tools(state: AgentState) -> list[tuple[str, dict[str, Any]]]:
-    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+    if (
+        state.get("policy_blocked")
+        or state.get("intent") == "policy_violation"
+        or state.get("intent") == "out_of_scope"
+        or state.get("duty_hit")
+    ):
         return []
     intent = state.get("intent") or ""
     entities = state.get("entities") or {}
@@ -320,7 +392,10 @@ def _plan_heuristic_tools(state: AgentState) -> list[tuple[str, dict[str, Any]]]
             planned.append((name, args))
 
     query = state.get("user_query") or ""
-    if order_id:
+    stock_ask = any(k in query for k in ("有货", "还有货", "库存", "缺货"))
+    points_ask = any(k in query for k in ("积分", "会员等级", "多少分"))
+    warranty_ask = any(k in query for k in ("保修", "质保", "在保", "保修期"))
+    if order_id and not (stock_ask or points_ask or warranty_ask):
         add("lookup_order", {"order_id": order_id})
         if intent == "order_status":
             add("get_shipping_status", {"order_id": order_id})
@@ -340,6 +415,24 @@ def _plan_heuristic_tools(state: AgentState) -> list[tuple[str, dict[str, Any]]]
             "create_ticket",
             {"category": "complaint", "summary": query[:80], "order_id": ""},
         )
+    if stock_ask:
+        add(
+            "check_stock",
+            {
+                "sku": entities.get("sku") or "",
+                "product": entities.get("product") or "",
+            },
+        )
+    if points_ask:
+        add(
+            "lookup_member_points",
+            {
+                "order_id": order_id or "",
+                "phone_last4": entities.get("phone_last4") or "",
+            },
+        )
+    if warranty_ask and order_id:
+        add("check_warranty", {"order_id": order_id})
     return planned
 
 
@@ -354,11 +447,8 @@ def _heuristic_final_reply(state: AgentState) -> str:
 
     if intent == "greeting":
         return "您好，我是星云数码客服助手。可以帮您查订单、退换货政策、商品规格或账号问题，请问需要什么帮助？"
-    if intent == "out_of_scope":
-        return (
-            "这个问题超出了我的职责范围，我这边主要处理购物、物流、退换货和账号售后。"
-            "如果您有订单或商品相关的问题，我很乐意继续帮您。"
-        )
+    if intent == "out_of_scope" or state.get("duty_hit"):
+        return declare_duty_boundary(state.get("duty_hit") or scan_duty_boundary(query))
     if intent == "chitchat":
         return "我在的。您可以直接说订单号、商品名称或具体售后问题，我来帮您处理。"
 
@@ -367,7 +457,7 @@ def _heuristic_final_reply(state: AgentState) -> str:
         facts.append(doc.get("content", ""))
     fact_blob = "\n".join(facts)
 
-    if intent == "product_inquiry":
+    if intent == "product_inquiry" and "check_stock" not in tool_text and "check_warranty" not in tool_text:
         top = (docs[0].get("content", "") if docs else "") or fact_blob
         if "手表" in query or "S2" in query.upper() or "独立通话" in top:
             return (
@@ -395,7 +485,7 @@ def _heuristic_final_reply(state: AgentState) -> str:
             return f"您好，{prefix} 请提供订单号，我可以帮您试算能否退货以及可退金额。"
         return f"您好，{prefix} {more}{tool_note} 您可以按上述说明办理，需要我帮您操作请再说一声。".strip()
 
-    if "lookup_order" in tool_text or "get_shipping_status" in tool_text or "create_ticket" in tool_text:
+    if "lookup_order" in tool_text or "get_shipping_status" in tool_text or "create_ticket" in tool_text or "check_stock" in tool_text or "lookup_member_points" in tool_text or "check_warranty" in tool_text:
         polite = "抱歉给您添麻烦了，已为您查询：" if intent == "complaint" else "您好，已为您查到："
         return f"{polite}{tool_text} 如需继续处理退换货或加急，请告诉我。"
 
@@ -421,6 +511,20 @@ def reply_generate(state: AgentState) -> dict:
             started,
         )
         return {"messages": [ai_msg], "final_reply": reply, **traced}
+    if state.get("intent") == "out_of_scope" or state.get("duty_hit"):
+        reply = declare_duty_boundary(
+            state.get("duty_hit") or scan_duty_boundary(state.get("user_query") or "")
+        )
+        ai_msg = AIMessage(content=reply)
+        outputs = {"action": "duty_boundary", "final_reply": reply}
+        traced = _trace(
+            state,
+            "reply_generate",
+            {"query": state.get("user_query") or "", "tool_round": 0},
+            outputs,
+            started,
+        )
+        return {"messages": [ai_msg], "final_reply": reply, **traced}
     model = get_chat_model()
     query = state.get("user_query") or ""
     tool_round = int(state.get("tool_round") or 0)
@@ -431,6 +535,7 @@ def reply_generate(state: AgentState) -> dict:
         sys = prompt.render_system(
             knowledge=_docs_block(state),
             entities=json.dumps(state.get("entities") or {}, ensure_ascii=False),
+            duty_rules=duty_rules_block(),
         )
         history = list(state.get("messages") or [])
         if not history:
@@ -513,6 +618,8 @@ def tools_node(state: AgentState) -> dict:
 
 def after_reply(state: AgentState) -> Literal["tools", "end"]:
     if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        return "end"
+    if state.get("intent") == "out_of_scope" or state.get("duty_hit"):
         return "end"
     max_rounds = int(load_agent("reply_generate").policy.get("max_tool_rounds") or 3)
     if int(state.get("tool_round") or 0) >= max_rounds:

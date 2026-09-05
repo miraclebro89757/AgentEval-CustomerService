@@ -92,6 +92,12 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=64)
+def load_rules(rules_id: str) -> dict[str, Any]:
+    path = _resolve_yaml("rules", rules_id)
+    return _read_yaml(path)
+
+
+@lru_cache(maxsize=64)
 def load_agent(agent_id: str) -> AgentPrompt:
     path = _resolve_yaml("agents", agent_id)
     raw = _read_yaml(path)
@@ -155,9 +161,20 @@ def list_judge_ids() -> list[str]:
     return list_ids("judges")
 
 
+def list_rule_ids() -> list[str]:
+    return list_ids("rules")
+
+
 def clear_prompt_cache() -> None:
     load_agent.cache_clear()
     load_judge.cache_clear()
+    load_rules.cache_clear()
+    try:
+        from graph.rules import clear_duty_rules_cache
+
+        clear_duty_rules_cache()
+    except Exception:
+        pass
 
 
 def render_catalog() -> str:
@@ -166,6 +183,11 @@ def render_catalog() -> str:
     for agent_id in list_agent_ids():
         prompt = load_agent(agent_id)
         lines.append(f"- `{prompt.id}`  node={prompt.node}  {prompt.role}  ({Path(prompt.path).name})")
+    lines.append("")
+    lines.append("## Rules")
+    for rules_id in list_rule_ids():
+        raw = load_rules(rules_id)
+        lines.append(f"- `{rules_id}`  {raw.get('role') or ''}")
     lines.append("")
     lines.append("## Judges")
     for metric_id in list_judge_ids():

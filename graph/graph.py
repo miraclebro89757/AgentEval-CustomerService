@@ -94,6 +94,7 @@ def invoke_agent(
             "entities": {},
             "policy_blocked": False,
             "policy_hit": {},
+            "duty_hit": {},
         },
         config=config,
     )

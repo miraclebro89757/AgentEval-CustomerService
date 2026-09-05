@@ -21,12 +21,14 @@
 
 预处理会扫描黄赌毒等关键词：命中则意图为 `policy_violation`，路由 `blocked`，立刻声明服务边界并结束，不进 Supervisor / RAG / 工具。词表在 `prompts/agents/intent_preprocess.yaml` 的 `policy.safety`。
 
+职责边界规则在 `prompts/rules/duty_boundary.yaml`：天气、代写、理财、法律、医疗、竞品客服、越狱改身份等会标成 `out_of_scope`，回复必须**声明职责边界**，且不调用工具。黄赌毒仍走更严的安全拦截。
+
 对应代码：
 
 
 | 角色        | 节点                              | 文件                                      |
 | --------- | ------------------------------- | --------------------------------------- |
-| 子 Agent 1 | `intent_preprocess`             | `graph/nodes.py` + `graph/safety.py`    |
+| 子 Agent 1 | `intent_preprocess`             | `graph/nodes.py` + `graph/safety.py` + `graph/rules.py` |
 | 主 Agent   | `supervisor`                    | `graph/nodes.py`                        |
 | 子 Agent 2 | `rag_retrieve`                  | `graph/nodes.py` + `graph/retriever.py` |
 | 子 Agent 3 | `reply_generate` + `tools`      | `graph/nodes.py` + `graph/tools.py`     |
@@ -152,7 +154,12 @@ export OLLAMA_BASE_URL=http://localhost:11434
 }
 ```
 
-模拟知识库在 `data/knowledge_base.json`，模拟订单在 `graph/tools.py` 的 `ORDERS`。可用订单号：`A20240901`（已发货）、`A20240888`（已签收、可退）、`A20240700`（超 7 天）、`A20241002`（待发货）。
+模拟知识库在 `data/knowledge_base.json`，模拟订单/库存/积分/质保在 `graph/tools.py`。可用订单号：`A20240901`（已发货）、`A20240888`（已签收、可退）、`A20240700`（超 7 天）、`A20241002`（待发货）。
+
+回复子 Agent 现有 **7** 个 mock 工具：
+
+- 原有：`lookup_order` `get_shipping_status` `calculate_refund` `create_ticket`
+- 新增：`check_stock`（库存/仓位）、`lookup_member_points`（积分/等级）、`check_warranty`（是否在保）
 
 ---
 
@@ -209,11 +216,13 @@ AgentEval-CustomerService/
 ├── prompts/
 │   ├── agents/                  # 每个 Agent 一份业务 prompt
 │   ├── judges/                  # 每个指标一份 judge prompt
+│   ├── rules/                   # 职责边界等规则
 │   └── loader.py
 ├── graph/
 │   ├── state.py                 # AgentState + 路由表
 │   ├── nodes.py                 # 四个关键节点 + ToolNode 包装
 │   ├── safety.py                # 预处理黄赌毒关键词过滤
+│   ├── rules.py                 # 职责边界识别与声明
 │   ├── graph.py                 # StateGraph + DeepEval CallbackHandler
 │   ├── tools.py                 # 回复子 Agent 的工具
 │   ├── retriever.py             # 模拟知识库检索

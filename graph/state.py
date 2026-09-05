@@ -76,7 +76,7 @@ class AgentState(TypedDict, total=False):
     intent_confidence: float
     entities: dict[str, Any]
     policy_blocked: bool
-    policy_hit: dict[str, Any]
+    duty_hit: dict[str, Any]
 
     # Supervisor: 只路由
     supervisor_intent: str
