@@ -9,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 
 from graph.llm import load_llm_settings
 from graph.nodes import (
+    after_preprocess,
     after_reply,
     intent_preprocess,
     rag_retrieve,
@@ -29,7 +30,11 @@ def build_graph():
     workflow.add_node("tools", tools_node)
 
     workflow.add_edge(START, "intent_preprocess")
-    workflow.add_edge("intent_preprocess", "supervisor")
+    workflow.add_conditional_edges(
+        "intent_preprocess",
+        after_preprocess,
+        {"supervisor": "supervisor", "end": END},
+    )
     workflow.add_conditional_edges(
         "supervisor",
         route_from_supervisor,
@@ -87,6 +92,8 @@ def invoke_agent(
             "retrieved_doc_ids": [],
             "tool_round": 0,
             "entities": {},
+            "policy_blocked": False,
+            "policy_hit": {},
         },
         config=config,
     )

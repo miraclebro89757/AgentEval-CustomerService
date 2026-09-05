@@ -10,6 +10,7 @@ evaluation_params:
   - EXPECTED_OUTPUT
 criteria: |
   主 Agent 是否把请求分给了正确的子 Agent（rag_agent / tool_agent / direct_reply）。
+  预处理命中安全策略时应为 blocked，且后续节点不应再跑。
 evaluation_steps:
   - 理解三种路由的职责：rag=知识库，tool=订单/工单工具，direct=问候或拒答。
   - 对比预测路由与标注路由。

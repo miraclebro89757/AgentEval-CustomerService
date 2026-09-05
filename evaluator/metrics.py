@@ -137,6 +137,9 @@ def _point_hit(point: str, text: str) -> bool:
         "购物": ["购物"],
         "售后": ["售后"],
         "超出": ["超出"],
+        "边界": ["服务边界", "边界", "违规"],
+        "无法协助": ["无法协助", "不能回答", "无法处理"],
+        "违规": ["违规", "色情", "赌博", "毒品"],
     }
     blob = text or ""
     for token in aliases.get(point, [point]):

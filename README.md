@@ -15,48 +15,18 @@
 
 ## 架构
 
-```text
-用户问题
-    │
-    ▼
-┌──────────────────────────────────┐
-│ 子 Agent 1  intent_preprocess     │  ← 评测：意图识别准确率
-│ 意图识别 + 实体抽取 / 规范化        │
-└────────────────┬─────────────────┘
-                 ▼
-┌──────────────────────────────────┐
-│ Supervisor（主 Agent）            │  ← 评测：路由决策正确性
-│ 只路由，不生成最终回复              │
-│ rag_agent | tool_agent | direct  │
-└──────┬────────────┬──────────────┘
-       │            │
-       ▼            ▼
-┌─────────────┐   直接进入回复
-│ 子 Agent 2  │
-│ rag_retrieve│  ← 评测：RAG 检索质量
-└──────┬──────┘
-       ▼
-┌──────────────────────────────────┐
-│ 子 Agent 3  reply_generate        │  ← 评测：相关性 / 完整性 / 礼貌度
-│ 可调用工具：查订单 / 物流 / 退款    │  ← 评测：ToolCorrectness
-│ 试算 / 建工单                      │
-└──────┬───────────────────────────┘
-       │ tool_calls
-       ▼
-     tools  ──► 回到 reply_generate
-       │
-       ▼
-     最终回复
+![LangGraph + DeepEval architecture](docs/architecture.png)
 
-整条 path + tools + reply  →  Trajectory：TaskCompletion + StepEfficiency
-```
+整条 `path` + tools + reply → Trajectory：`TaskCompletion` + `StepEfficiency`。
+
+预处理会扫描黄赌毒等关键词：命中则意图为 `policy_violation`，路由 `blocked`，立刻声明服务边界并结束，不进 Supervisor / RAG / 工具。词表在 `prompts/agents/intent_preprocess.yaml` 的 `policy.safety`。
 
 对应代码：
 
 
 | 角色        | 节点                              | 文件                                      |
 | --------- | ------------------------------- | --------------------------------------- |
-| 子 Agent 1 | `intent_preprocess`             | `graph/nodes.py`                        |
+| 子 Agent 1 | `intent_preprocess`             | `graph/nodes.py` + `graph/safety.py`    |
 | 主 Agent   | `supervisor`                    | `graph/nodes.py`                        |
 | 子 Agent 2 | `rag_retrieve`                  | `graph/nodes.py` + `graph/retriever.py` |
 | 子 Agent 3 | `reply_generate` + `tools`      | `graph/nodes.py` + `graph/tools.py`     |
@@ -243,6 +213,7 @@ AgentEval-CustomerService/
 ├── graph/
 │   ├── state.py                 # AgentState + 路由表
 │   ├── nodes.py                 # 四个关键节点 + ToolNode 包装
+│   ├── safety.py                # 预处理黄赌毒关键词过滤
 │   ├── graph.py                 # StateGraph + DeepEval CallbackHandler
 │   ├── tools.py                 # 回复子 Agent 的工具
 │   ├── retriever.py             # 模拟知识库检索

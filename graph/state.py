@@ -21,9 +21,10 @@ Intent = Literal[
     "complaint",
     "chitchat",
     "out_of_scope",
+    "policy_violation",
 ]
 
-Route = Literal["rag_agent", "tool_agent", "direct_reply"]
+Route = Literal["rag_agent", "tool_agent", "direct_reply", "blocked"]
 
 VALID_INTENTS: tuple[str, ...] = (
     "greeting",
@@ -35,15 +36,18 @@ VALID_INTENTS: tuple[str, ...] = (
     "complaint",
     "chitchat",
     "out_of_scope",
+    "policy_violation",
 )
 
 VALID_ROUTES: tuple[str, ...] = ("rag_agent", "tool_agent", "direct_reply")
+BLOCKED_ROUTE: Route = "blocked"
 
 # Supervisor 路由表：意图 → 子 Agent。评测时与 expected_route 对齐。
 INTENT_TO_ROUTE: dict[str, Route] = {
     "greeting": "direct_reply",
     "chitchat": "direct_reply",
     "out_of_scope": "direct_reply",
+    "policy_violation": "blocked",
     "order_status": "tool_agent",
     "complaint": "tool_agent",
     "product_inquiry": "rag_agent",
@@ -71,6 +75,8 @@ class AgentState(TypedDict, total=False):
     intent: str
     intent_confidence: float
     entities: dict[str, Any]
+    policy_blocked: bool
+    policy_hit: dict[str, Any]
 
     # Supervisor: 只路由
     supervisor_intent: str

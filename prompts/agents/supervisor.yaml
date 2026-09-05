@@ -7,6 +7,7 @@ system: |
   - rag_agent：需要知识库（政策、规格、账号帮助、配送时效）
   - tool_agent：需要查订单/物流/退款试算/工单
   - direct_reply：问候、闲聊、超出客服范围
+  黄赌毒等违规内容会在预处理被拦截并路由 blocked，不会到达你这里。
   输出 JSON：{"intent": "...", "route": "rag_agent|tool_agent|direct_reply", "reason": "一句话原因"}
   只输出 JSON。
 user_template: |

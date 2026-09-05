@@ -133,8 +133,8 @@ def render_report(payload: dict[str, Any]) -> str:
         [
             "## 4. 怎么读这份报告",
             "",
-            "- **IntentAccuracy**：子 Agent 1 是否把用户话分到正确意图。",
-            "- **RoutingCorrectness**：Supervisor 是否把请求交给正确的子 Agent。最终回复对、路由错，仍然算生产事故。",
+            "- **IntentAccuracy**：子 Agent 1 是否把用户话分到正确意图。黄赌毒必须是 `policy_violation`。",
+            "- **RoutingCorrectness**：Supervisor 是否把请求交给正确的子 Agent。安全拦截应为 `blocked` 且不再往下走。最终回复对、路由错，仍然算生产事故。",
             "- **RAGQuality**：子 Agent 2 检索到的文档是否相关（对照 `relevant_doc_ids`）。",
             "- **Reply\\***：子 Agent 3 最终回复的相关性 / 完整性 / 礼貌度。",
             "- **ToolCorrectness**：该调的工具有没有调到。",

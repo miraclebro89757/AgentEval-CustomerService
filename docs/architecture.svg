@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <style>
+    text { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'PingFang SC', 'Microsoft YaHei', 'SimHei', monospace; fill: #e2e8f0; }
+  </style>
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f0f1a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f97316"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10b981"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a855f7"/>
+    </marker>
+    <marker id="arrow-gold" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#eab308"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bg-grad)"/>
+  <text x="48" y="36" font-size="18" font-weight="700" letter-spacing="0.02em">AgentEval-CustomerService</text>
+  <text x="48" y="56" font-size="12" fill="#94a3b8">LangGraph StateGraph  ·  Supervisor + 3 sub-agents  ·  DeepEval node-level eval</text>
+  <rect x="40" y="76" width="780" height="660" rx="10" ry="10" fill="#0f172a" stroke="#334155" stroke-width="1" stroke-dasharray="6 4"/>
+  <text x="56" y="100" font-size="13" font-weight="700" fill="#94a3b8">LANGGRAPH RUNTIME</text>
+  <rect x="844" y="76" width="316" height="660" rx="10" ry="10" fill="#0f172a" stroke="#334155" stroke-width="1" stroke-dasharray="6 4"/>
+  <text x="860" y="100" font-size="13" font-weight="700" fill="#94a3b8">DEEPEVAL SCORING</text>
+  <path d="M 428,168 V 208" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 428,272 V 312" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M 374,392 V 412 H 172 V 432" fill="none" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <path d="M 428,392 V 544" fill="none" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <path d="M 482,392 V 524 H 500 V 544" fill="none" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <path d="M 272,468 H 296 V 580 H 320" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <path d="M 600,564 H 640" fill="none" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <path d="M 640,596 H 600" fill="none" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-purple)"/>
+  <path d="M 460,616 V 656" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <text x="190" y="424" font-size="11" fill="#f97316">rag_agent</text>
+  <text x="336" y="470" font-size="11" fill="#f97316">direct_reply</text>
+  <text x="508" y="516" font-size="11" fill="#f97316">tool_agent</text>
+  <text x="200" y="538" font-size="11" fill="#10b981">top-3 docs</text>
+  <text x="620" y="558" text-anchor="middle" font-size="11" fill="#a855f7">call</text>
+  <text x="620" y="614" text-anchor="middle" font-size="11" fill="#a855f7">result</text>
+  <rect x="318" y="120" width="220" height="48" rx="6" ry="6" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="428" y="141" text-anchor="middle" font-size="13" font-weight="700">User Query</text>
+  <text x="428" y="157" text-anchor="middle" font-size="11" fill="#94a3b8">messages / user_query</text>
+  <rect x="248" y="208" width="360" height="64" rx="6" ry="6" fill="#1e1b4b" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="264" y="230" font-size="11" fill="#a855f7">SUB-AGENT 1</text>
+  <text x="428" y="250" text-anchor="middle" font-size="14" font-weight="700">intent_preprocess</text>
+  <text x="428" y="264" text-anchor="middle" font-size="11" fill="#94a3b8">intent + entities   ·   IntentAccuracy</text>
+  <polygon points="374,312 482,312 536,352 482,392 374,392 320,352" fill="#1e1b4b" stroke="#a855f7" stroke-width="2"/>
+  <polygon points="382,320 474,320 520,352 474,384 382,384 336,352" fill="none" stroke="#7c3aed" stroke-width="1"/>
+  <text x="428" y="344" text-anchor="middle" font-size="11" fill="#a855f7">SUPERVISOR</text>
+  <text x="428" y="362" text-anchor="middle" font-size="14" font-weight="700">route only</text>
+  <text x="428" y="378" text-anchor="middle" font-size="11" fill="#94a3b8">RoutingCorrectness</text>
+  <rect x="72" y="432" width="200" height="72" rx="6" ry="6" fill="#052e16" stroke="#10b981" stroke-width="1.5"/>
+  <text x="84" y="454" font-size="11" fill="#10b981">SUB-AGENT 2</text>
+  <text x="172" y="474" text-anchor="middle" font-size="13" font-weight="700">rag_retrieve</text>
+  <text x="172" y="490" text-anchor="middle" font-size="11" fill="#94a3b8">KB top_k=3 · RAGQuality</text>
+  <rect x="320" y="544" width="280" height="72" rx="6" ry="6" fill="#1c1917" stroke="#f97316" stroke-width="1.5"/>
+  <text x="336" y="566" font-size="11" fill="#f97316">SUB-AGENT 3</text>
+  <text x="460" y="586" text-anchor="middle" font-size="13" font-weight="700">reply_generate</text>
+  <text x="460" y="602" text-anchor="middle" font-size="11" fill="#94a3b8">Relevancy · Completeness · Politeness</text>
+  <rect x="640" y="544" width="140" height="72" rx="6" ry="6" fill="#1c1917" stroke="#eab308" stroke-width="1.5"/>
+  <text x="710" y="566" text-anchor="middle" font-size="11" fill="#eab308">TOOLNODE</text>
+  <text x="710" y="586" text-anchor="middle" font-size="13" font-weight="700">tools</text>
+  <text x="710" y="602" text-anchor="middle" font-size="11" fill="#94a3b8">ToolCorrectness</text>
+  <rect x="320" y="656" width="280" height="48" rx="6" ry="6" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="460" y="677" text-anchor="middle" font-size="13" font-weight="700">final_reply</text>
+  <text x="460" y="693" text-anchor="middle" font-size="11" fill="#94a3b8">path[] + node_traces[]</text>
+  <text x="860" y="128" font-size="12" font-weight="700" fill="#eab308">COMPONENT</text>
+  <rect x="860" y="140" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#7c3aed" stroke-width="1"/>
+  <text x="874" y="162" font-size="12" font-weight="700">IntentAccuracy</text>
+  <text x="874" y="180" font-size="11" fill="#94a3b8">intent_preprocess  in / out</text>
+  <rect x="860" y="200" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#a855f7" stroke-width="1"/>
+  <text x="874" y="222" font-size="12" font-weight="700">RoutingCorrectness</text>
+  <text x="874" y="240" font-size="11" fill="#94a3b8">supervisor route vs expected</text>
+  <rect x="860" y="260" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#10b981" stroke-width="1"/>
+  <text x="874" y="282" font-size="12" font-weight="700">RAGQuality</text>
+  <text x="874" y="300" font-size="11" fill="#94a3b8">retrieved_doc_ids vs gold</text>
+  <rect x="860" y="320" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#f97316" stroke-width="1"/>
+  <text x="874" y="342" font-size="12" font-weight="700">ReplyRelevancy / Completeness</text>
+  <text x="874" y="360" font-size="11" fill="#94a3b8">final_reply vs user goal</text>
+  <rect x="860" y="380" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#eab308" stroke-width="1"/>
+  <text x="874" y="402" font-size="12" font-weight="700">ReplyPoliteness · ToolCorrectness</text>
+  <text x="874" y="420" font-size="11" fill="#94a3b8">tone + tool name/args</text>
+  <text x="860" y="460" font-size="12" font-weight="700" fill="#3b82f6">TRAJECTORY</text>
+  <rect x="860" y="472" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
+  <text x="874" y="494" font-size="12" font-weight="700">TaskCompletion</text>
+  <text x="874" y="512" font-size="11" fill="#94a3b8">official metric, else fallback</text>
+  <rect x="860" y="532" width="284" height="52" rx="6" ry="6" fill="#0f172a" stroke="#3b82f6" stroke-width="1"/>
+  <text x="874" y="554" font-size="12" font-weight="700">StepEfficiency</text>
+  <text x="874" y="572" font-size="11" fill="#94a3b8">path length vs expected_path</text>
+  <rect x="860" y="604" width="284" height="108" rx="6" ry="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="874" y="628" font-size="12" font-weight="700" fill="#94a3b8">PROMPTS</text>
+  <text x="874" y="650" font-size="11" fill="#e2e8f0">prompts/agents/*.yaml</text>
+  <text x="874" y="668" font-size="11" fill="#94a3b8">one business prompt / node</text>
+  <text x="874" y="690" font-size="11" fill="#e2e8f0">prompts/judges/*.yaml</text>
+  <rect x="40" y="752" width="1120" height="32" rx="6" ry="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <line x1="60" y1="768" x2="92" y2="768" stroke="#3b82f6" stroke-width="2"/>
+  <text x="100" y="772" font-size="12" fill="#94a3b8">primary path</text>
+  <line x1="232" y1="768" x2="264" y2="768" stroke="#f97316" stroke-width="1.5"/>
+  <text x="272" y="772" font-size="12" fill="#94a3b8">supervisor route</text>
+  <line x1="432" y1="768" x2="464" y2="768" stroke="#10b981" stroke-width="1.5"/>
+  <text x="472" y="772" font-size="12" fill="#94a3b8">RAG knowledge</text>
+  <line x1="616" y1="768" x2="648" y2="768" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="656" y="772" font-size="12" fill="#94a3b8">tool call</text>
+  <line x1="748" y1="768" x2="788" y2="768" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="796" y="772" font-size="12" fill="#94a3b8">tool result loop</text>
+  <text x="980" y="772" font-size="12" fill="#475569">style 2 · fireworks-tech-graph</text>
+</svg>

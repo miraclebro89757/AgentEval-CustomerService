@@ -13,7 +13,8 @@ from langgraph.prebuilt import ToolNode
 
 from graph.llm import extract_json_object, get_chat_model
 from graph.retriever import retrieve
-from graph.state import INTENT_TO_ROUTE, VALID_INTENTS, VALID_ROUTES, AgentState
+from graph.safety import boundary_reply, scan_policy_violation
+from graph.state import BLOCKED_ROUTE, INTENT_TO_ROUTE, VALID_INTENTS, VALID_ROUTES, AgentState
 from graph.tools import CUSTOMER_TOOLS, invoke_tool
 from prompts import load_agent
 
@@ -68,6 +69,8 @@ def _extract_order_id(text: str) -> str | None:
 
 
 def classify_intent_heuristic(query: str) -> tuple[str, float]:
+    if scan_policy_violation(query):
+        return "policy_violation", 1.0
     q = (query or "").strip().lower()
     scores: dict[str, int] = {}
     for intent, kws in INTENT_KEYWORDS.items():
@@ -104,13 +107,46 @@ def _heuristic_preprocess(query: str) -> dict[str, Any]:
     }
 
 
+def _policy_block_payload(query: str, hit: dict[str, Any]) -> dict[str, Any]:
+    reply = boundary_reply()
+    cleaned = re.sub(r"\s+", " ", query).strip()
+    return {
+        "intent": "policy_violation",
+        "intent_confidence": 1.0,
+        "cleaned_query": cleaned,
+        "entities": {},
+        "policy_blocked": True,
+        "policy_hit": hit,
+        "route": BLOCKED_ROUTE,
+        "route_reason": "预处理命中安全策略，声明服务边界并终止后续节点",
+        "final_reply": reply,
+        "messages": [AIMessage(content=reply)],
+    }
+
+
 def intent_preprocess(state: AgentState) -> dict:
-    """子 Agent 1：意图识别 + 预处理。"""
+    """子 Agent 1：安全过滤 + 意图识别 + 预处理。黄赌毒命中则直接声明边界。"""
     started = _now()
     query = state.get("user_query") or ""
     if state.get("messages"):
         first = state["messages"][0]
         query = query or getattr(first, "content", "") or str(first)
+    hit = scan_policy_violation(query)
+    if hit:
+        result = _policy_block_payload(query, hit)
+        traced = _trace(
+            state,
+            "intent_preprocess",
+            {"user_query": query},
+            {
+                "intent": result["intent"],
+                "policy_blocked": True,
+                "policy_hit": hit,
+                "route": BLOCKED_ROUTE,
+            },
+            started,
+        )
+        return {"user_query": query, **result, **traced}
     result = _heuristic_preprocess(query)
     model = get_chat_model()
     if model is not None:
@@ -123,7 +159,7 @@ def intent_preprocess(state: AgentState) -> dict:
                 ]
             )
             parsed = extract_json_object(getattr(msg, "content", "") or "")
-            if parsed and parsed.get("intent") in VALID_INTENTS:
+            if parsed and parsed.get("intent") in VALID_INTENTS and parsed.get("intent") != "policy_violation":
                 result["intent"] = parsed["intent"]
                 result["intent_confidence"] = float(parsed.get("confidence") or result["intent_confidence"])
                 result["cleaned_query"] = parsed.get("cleaned_query") or result["cleaned_query"]
@@ -148,9 +184,30 @@ def _route_for_intent(intent: str) -> str:
     return INTENT_TO_ROUTE.get(intent, "direct_reply")
 
 
+def after_preprocess(state: AgentState) -> Literal["supervisor", "end"]:
+    """安全命中后不再进入 Supervisor / RAG / 工具。"""
+    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        return "end"
+    return "supervisor"
+
+
 def supervisor(state: AgentState) -> dict:
     """主 Agent：只做意图复核和路由，不生成最终回复。"""
     started = _now()
+    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        outputs = {
+            "supervisor_intent": "policy_violation",
+            "route": BLOCKED_ROUTE,
+            "route_reason": "预处理已声明服务边界，Supervisor 不再改路由",
+        }
+        traced = _trace(
+            state,
+            "supervisor",
+            {"intent": state.get("intent"), "entities": state.get("entities") or {}},
+            outputs,
+            started,
+        )
+        return {**outputs, **traced}
     intent = state.get("intent") or "chitchat"
     query = state.get("user_query") or ""
     route = _route_for_intent(intent)
@@ -250,6 +307,8 @@ def _tool_messages_text(state: AgentState) -> str:
 
 
 def _plan_heuristic_tools(state: AgentState) -> list[tuple[str, dict[str, Any]]]:
+    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        return []
     intent = state.get("intent") or ""
     entities = state.get("entities") or {}
     order_id = entities.get("order_id")
@@ -287,6 +346,8 @@ def _plan_heuristic_tools(state: AgentState) -> list[tuple[str, dict[str, Any]]]
 def _heuristic_final_reply(state: AgentState) -> str:
     intent = state.get("intent") or "chitchat"
     query = state.get("user_query") or ""
+    if state.get("policy_blocked") or intent == "policy_violation":
+        return boundary_reply()
     docs = state.get("retrieved_docs") or []
     tool_text = _tool_messages_text(state)
     order_id = (state.get("entities") or {}).get("order_id")
@@ -348,6 +409,18 @@ def _heuristic_final_reply(state: AgentState) -> str:
 def reply_generate(state: AgentState) -> dict:
     """子 Agent 3：可调用工具的回复生成。"""
     started = _now()
+    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        reply = state.get("final_reply") or boundary_reply()
+        ai_msg = AIMessage(content=reply)
+        outputs = {"action": "boundary", "final_reply": reply}
+        traced = _trace(
+            state,
+            "reply_generate",
+            {"query": state.get("user_query") or "", "tool_round": 0},
+            outputs,
+            started,
+        )
+        return {"messages": [ai_msg], "final_reply": reply, **traced}
     model = get_chat_model()
     query = state.get("user_query") or ""
     tool_round = int(state.get("tool_round") or 0)
@@ -439,6 +512,8 @@ def tools_node(state: AgentState) -> dict:
 
 
 def after_reply(state: AgentState) -> Literal["tools", "end"]:
+    if state.get("policy_blocked") or state.get("intent") == "policy_violation":
+        return "end"
     max_rounds = int(load_agent("reply_generate").policy.get("max_tool_rounds") or 3)
     if int(state.get("tool_round") or 0) >= max_rounds:
         return "end"
@@ -454,6 +529,7 @@ def after_reply(state: AgentState) -> Literal["tools", "end"]:
 # 启发式模式下若模型不可用，仍允许直接 invoke 单个工具（评测单测会用到）
 __all__ = [
     "intent_preprocess",
+    "after_preprocess",
     "supervisor",
     "route_from_supervisor",
     "rag_retrieve",
