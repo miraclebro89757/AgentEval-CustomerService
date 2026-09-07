@@ -69,6 +69,9 @@ class AgentState(TypedDict, total=False):
 
     messages: Annotated[list, add_messages]
     user_query: str
+    memory: dict[str, Any]
+    turn_index: int
+    session_capped: bool
 
     # Sub-Agent 1: 意图识别 + 预处理
     cleaned_query: str

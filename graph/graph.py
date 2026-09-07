@@ -75,15 +75,19 @@ def invoke_agent(
     graph=None,
     case_id: str | None = None,
     use_deepeval_callback: bool = True,
+    memory: dict[str, Any] | None = None,
+    history: list | None = None,
+    turn_index: int = 1,
 ) -> AgentState:
     compiled = graph or build_graph()
     callbacks = _deepeval_callbacks(case_id) if use_deepeval_callback else []
     config: dict[str, Any] = {"recursion_limit": 12}
     if callbacks:
         config["callbacks"] = callbacks
+    prior = list(history or [])
     result = compiled.invoke(
         {
-            "messages": [HumanMessage(content=query)],
+            "messages": [*prior, HumanMessage(content=query)],
             "user_query": query,
             "path": [],
             "node_traces": [],
@@ -95,6 +99,9 @@ def invoke_agent(
             "policy_blocked": False,
             "policy_hit": {},
             "duty_hit": {},
+            "memory": memory or {},
+            "turn_index": turn_index,
+            "session_capped": False,
         },
         config=config,
     )

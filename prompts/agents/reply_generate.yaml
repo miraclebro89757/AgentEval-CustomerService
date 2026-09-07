@@ -15,6 +15,9 @@ system: |
 
   已知实体：
   {entities}
+
+  多轮记忆（滑动窗口，最近 5 轮）：
+  {memory_block}
 user_template: "{query}"
 policy:
   tools:

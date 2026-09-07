@@ -4,35 +4,22 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
 import urllib.request
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-from graph.llm import extract_json_object
+from graph.llm import extract_json_object, ollama_available, ollama_base_url, ollama_model_name
 
 load_dotenv()
-
-
-def _ollama_base() -> str:
-    return (os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
-
-
-def ollama_available(timeout: float = 0.4) -> bool:
-    try:
-        urllib.request.urlopen(f"{_ollama_base()}/api/tags", timeout=timeout)
-        return True
-    except Exception:
-        return False
 
 
 class OllamaJudge:
     """DeepEvalBaseLLM 适配器。延迟继承，避免未安装 deepeval 时本模块无法导入。"""
 
     def __init__(self, model: str | None = None, base_url: str | None = None):
-        self.model_name = model or os.getenv("OLLAMA_MODEL") or "qwen2.5:7b"
-        self.base_url = (base_url or _ollama_base()).rstrip("/")
+        self.model_name = model or ollama_model_name()
+        self.base_url = (base_url or ollama_base_url()).rstrip("/")
         self._deepeval_base = None
 
     def load_model(self):
@@ -43,7 +30,12 @@ class OllamaJudge:
 
     def _complete(self, prompt: str) -> str:
         body = json.dumps(
-            {"model": self.model_name, "prompt": prompt, "stream": False},
+            {
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": False,
+                "think": False,
+            },
             ensure_ascii=False,
         ).encode("utf-8")
         req = urllib.request.Request(
@@ -52,7 +44,7 @@ class OllamaJudge:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
         return payload.get("response") or ""
 
@@ -102,7 +94,7 @@ def resolve_judge() -> tuple[str, Optional[Any]]:
     model 为 str 时交给 DeepEval 走 OpenAI；为 DeepEvalBaseLLM 时走 Ollama；
     为 None 时只用确定性指标（零配置可跑）。
     """
-    mode = (os.getenv("JUDGE_LLM") or "auto").strip().lower()
+    mode = (os.getenv("JUDGE_LLM") or "heuristic").strip().lower()
     if mode == "heuristic":
         return "heuristic", None
     if mode == "openai" or (mode == "auto" and os.getenv("OPENAI_API_KEY")):
@@ -111,7 +103,7 @@ def resolve_judge() -> tuple[str, Optional[Any]]:
         )
     if mode in {"ollama", "auto"} and ollama_available():
         try:
-            return f"ollama:{(os.getenv('OLLAMA_MODEL') or 'qwen2.5:7b')}", OllamaJudge().as_deepeval_llm()
+            return f"ollama:{ollama_model_name()}", OllamaJudge().as_deepeval_llm()
         except Exception:
             if mode == "ollama":
                 raise

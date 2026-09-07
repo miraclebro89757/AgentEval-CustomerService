@@ -13,6 +13,7 @@ from langgraph.prebuilt import ToolNode
 
 from graph.llm import extract_json_object, get_chat_model
 from graph.retriever import retrieve
+from graph.memory import format_memory_block, merge_entities, resolve_followup_intent
 from graph.rules import declare_duty_boundary, duty_rules_block, scan_duty_boundary
 from graph.safety import boundary_reply, scan_policy_violation
 from graph.state import BLOCKED_ROUTE, INTENT_TO_ROUTE, VALID_INTENTS, VALID_ROUTES, AgentState
@@ -24,7 +25,7 @@ ORDER_RE = re.compile(r"\bA\d{7,10}\b", re.I)
 INTENT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "greeting": ("你好", "您好", "在吗", "hi", "hello", "早上好"),
     "complaint": ("投诉", "损坏", "划痕", "撞坏", "太气", "差评", "态度"),
-    "refund": ("退货", "退款", "无理由", "能退吗", "退多少"),
+    "refund": ("退货", "退款", "无理由", "能退吗", "退多少", "那就退", "帮我退", "退吧"),
     "order_status": ("发到哪", "到哪了", "物流", "运单", "查一下订单", "订单"),
     "shipping": ("发货", "几天能到", "几天能收到", "配送", "时效", "改地址", "拦截"),
     "account": ("密码", "登录", "账号", "注销", "发票", "积分", "验证码"),
@@ -75,7 +76,7 @@ def _extract_order_id(text: str) -> str | None:
     return match.group(0).upper() if match else None
 
 
-def classify_intent_heuristic(query: str) -> tuple[str, float]:
+def classify_intent_heuristic(query: str, last_intent: str | None = None) -> tuple[str, float]:
     if scan_policy_violation(query):
         return "policy_violation", 1.0
     if scan_duty_boundary(query):
@@ -101,6 +102,9 @@ def classify_intent_heuristic(query: str) -> tuple[str, float]:
     best = max(scores, key=lambda k: scores[k])
     best_score = scores[best]
     if best_score <= 0:
+        follow = resolve_followup_intent(query, last_intent)
+        if follow:
+            return follow, 0.82
         if len(q) <= 8 and any(g in q for g in ("你好", "在吗", "hi")):
             return "greeting", 0.8
         return "chitchat", 0.45
@@ -108,8 +112,13 @@ def classify_intent_heuristic(query: str) -> tuple[str, float]:
     return best, confidence
 
 
-def _heuristic_preprocess(query: str) -> dict[str, Any]:
-    intent, confidence = classify_intent_heuristic(query)
+def _heuristic_preprocess(query: str, memory: dict[str, Any] | None = None) -> dict[str, Any]:
+    memory = memory or {}
+    last_intent = memory.get("last_intent")
+    intent, confidence = classify_intent_heuristic(query, last_intent=last_intent)
+    follow = resolve_followup_intent(query, last_intent)
+    if follow and intent in {"chitchat", "greeting"}:
+        intent, confidence = follow, max(float(confidence), 0.82)
     order_id = _extract_order_id(query)
     sku = None
     if re.search(r"WH-100", query, re.I):
@@ -127,13 +136,43 @@ def _heuristic_preprocess(query: str) -> dict[str, Any]:
     tail = re.search(r"尾号\s*(\d{4})", query)
     if tail:
         phone_last4 = tail.group(1)
+    entities = merge_entities(
+        memory.get("entities") or {},
+        {"order_id": order_id, "product": product, "sku": sku, "phone_last4": phone_last4},
+    )
     cleaned = re.sub(r"\s+", " ", query).strip()
+    remembered_oid = entities.get("order_id")
+    if remembered_oid and str(remembered_oid) not in query:
+        cleaned = f"{cleaned}（承接订单 {remembered_oid}）"
+    remembered_product = entities.get("product")
+    if (
+        remembered_product
+        and str(remembered_product) not in query
+        and "耳机" not in query
+        and "手表" not in query
+    ):
+        cleaned = f"{cleaned} {remembered_product}"
     return {
         "intent": intent,
         "intent_confidence": confidence,
         "cleaned_query": cleaned,
-        "entities": {"order_id": order_id, "product": product, "sku": sku, "phone_last4": phone_last4},
+        "entities": entities,
     }
+
+
+def _memory_block(state: AgentState) -> str:
+    return format_memory_block(state.get("memory") or {})
+
+
+def _current_query(state: AgentState) -> str:
+    """永远用本轮 user_query；不要取 messages[0]，多轮时那是第一轮问候。"""
+    query = (state.get("user_query") or "").strip()
+    if query:
+        return query
+    for msg in reversed(state.get("messages") or []):
+        if isinstance(msg, HumanMessage):
+            return (getattr(msg, "content", None) or str(msg) or "").strip()
+    return ""
 
 
 def _policy_block_payload(query: str, hit: dict[str, Any]) -> dict[str, Any]:
@@ -156,10 +195,8 @@ def _policy_block_payload(query: str, hit: dict[str, Any]) -> dict[str, Any]:
 def intent_preprocess(state: AgentState) -> dict:
     """子 Agent 1：安全过滤 + 意图识别 + 预处理。黄赌毒命中则直接声明边界。"""
     started = _now()
-    query = state.get("user_query") or ""
-    if state.get("messages"):
-        first = state["messages"][0]
-        query = query or getattr(first, "content", "") or str(first)
+    query = _current_query(state)
+    memory = state.get("memory") or {}
     hit = scan_policy_violation(query)
     if hit:
         result = _policy_block_payload(query, hit)
@@ -176,7 +213,7 @@ def intent_preprocess(state: AgentState) -> dict:
             started,
         )
         return {"user_query": query, **result, **traced}
-    result = _heuristic_preprocess(query)
+    result = _heuristic_preprocess(query, memory=memory)
     duty = scan_duty_boundary(query)
     if duty:
         result["intent"] = "out_of_scope"
@@ -188,8 +225,18 @@ def intent_preprocess(state: AgentState) -> dict:
             prompt = load_agent("intent_preprocess")
             msg = model.invoke(
                 [
-                    SystemMessage(content=prompt.render_system(duty_rules=duty_rules_block())),
-                    HumanMessage(content=prompt.render_user(query=query)),
+                    SystemMessage(
+                        content=prompt.render_system(
+                            duty_rules=duty_rules_block(),
+                            memory_block=_memory_block(state),
+                        )
+                    ),
+                    HumanMessage(
+                        content=prompt.render_user(
+                            query=query,
+                            memory_block=_memory_block(state),
+                        )
+                    ),
                 ]
             )
             parsed = extract_json_object(getattr(msg, "content", "") or "")
@@ -197,11 +244,9 @@ def intent_preprocess(state: AgentState) -> dict:
                 result["intent"] = parsed["intent"]
                 result["intent_confidence"] = float(parsed.get("confidence") or result["intent_confidence"])
                 result["cleaned_query"] = parsed.get("cleaned_query") or result["cleaned_query"]
-                entities = dict(result["entities"])
-                entities.update(parsed.get("entities") or {})
-                if not entities.get("order_id"):
-                    entities["order_id"] = _extract_order_id(query)
-                result["entities"] = entities
+                result["entities"] = merge_entities(result["entities"], parsed.get("entities") or {})
+                if not result["entities"].get("order_id"):
+                    result["entities"]["order_id"] = _extract_order_id(query)
         except Exception:
             pass
     duty = scan_duty_boundary(query)
@@ -267,7 +312,7 @@ def supervisor(state: AgentState) -> dict:
         )
         return {**outputs, **traced}
     intent = state.get("intent") or "chitchat"
-    query = state.get("user_query") or ""
+    query = _current_query(state)
     route = _route_for_intent(intent, query)
     reason = f"根据意图 {intent} 按路由表分发给 {route}"
     supervisor_intent = intent
@@ -278,12 +323,18 @@ def supervisor(state: AgentState) -> dict:
             prompt = load_agent("supervisor")
             msg = model.invoke(
                 [
-                    SystemMessage(content=prompt.render_system(duty_rules=duty_rules_block())),
+                    SystemMessage(
+                        content=prompt.render_system(
+                            duty_rules=duty_rules_block(),
+                            memory_block=_memory_block(state),
+                        )
+                    ),
                     HumanMessage(
                         content=prompt.render_user(
                             query=query,
                             intent=intent,
                             entities=json.dumps(state.get("entities") or {}, ensure_ascii=False),
+                            memory_block=_memory_block(state),
                         )
                     ),
                 ]
@@ -536,6 +587,7 @@ def reply_generate(state: AgentState) -> dict:
             knowledge=_docs_block(state),
             entities=json.dumps(state.get("entities") or {}, ensure_ascii=False),
             duty_rules=duty_rules_block(),
+            memory_block=_memory_block(state),
         )
         history = list(state.get("messages") or [])
         if not history:

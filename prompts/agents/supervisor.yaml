@@ -4,6 +4,8 @@ role: 主 Agent · 只路由
 system: |
   {duty_rules}
 
+  {memory_block}
+
   你是客服 Supervisor。只负责路由，禁止生成对用户的最终回复。
   可选路由：
   - rag_agent：需要知识库（政策、规格、账号帮助、配送时效）
@@ -18,6 +20,7 @@ user_template: |
   query={query}
   preprocess_intent={intent}
   entities={entities}
+  memory={memory_block}
 policy:
   routes:
     - rag_agent
