@@ -73,11 +73,17 @@ passed = gate_passed AND quality_passed
 ![LangGraph + DeepEval architecture](docs/architecture.png)
 
 ```text
-START → intent_preprocess → supervisor
-          ├ rag_agent → rag_retrieve → reply_generate
-          ├ tool_agent → reply_generate
-          └ direct_reply → reply_generate
-        reply_generate ⇄ tools（最多 3 轮）→ END
+Conversation（5 轮滑动窗口）→ query
+START → intent_preprocess
+          ├ policy_violation → blocked → END（不进 Supervisor / RAG / 工具）
+          └ supervisor
+                ├ rag_agent → rag_retrieve → reply_generate
+                ├ tool_agent → reply_generate ⇄ tools（最多 3 轮）
+                └ direct_reply → reply_generate（职责边界，不调工具）
+          → END
+
+评测：path + node_traces + tools → Gate（一票否决）+ Component + Trajectory
+passed = gate_passed AND quality_passed
 ```
 
 预处理扫到黄赌毒：意图 `policy_violation`，路由 `blocked`，立刻声明服务边界并结束，不进 Supervisor / RAG / 工具。词表在 `prompts/agents/intent_preprocess.yaml` 的 `policy.safety`。
@@ -327,6 +333,7 @@ AgentEval-CustomerService/
 │   ├── knowledge_base.json
 │   └── test_cases.json
 ├── docs/
+│   ├── architecture.svg
 │   └── architecture.png
 └── results/
 ```
